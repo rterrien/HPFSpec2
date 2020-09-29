@@ -14,6 +14,9 @@ import astropy
 import astropy.stats
 from hpfspec2 import fitting_utils
 from PyAstronomy import pyasl
+from collections import OrderedDict
+from astropy.modeling.models import Chebyshev1D
+import specutils
 
 class HPFSpectrum(object):
     """ An object containing HPF spectral data.
@@ -190,9 +193,9 @@ class HPFSpectrum(object):
             if self.verbose:
                 print('CCF Mask loaded')
         
-        print('Barycentric shifting')
         #self.rv = 0.
         if ccf_redshift:
+            print('Barycentric shifting')
             rabs,rabss = self.rvabs_orders()
             self.rv = rabs #np.median(rabs)
             if self.verbose:
@@ -560,13 +563,22 @@ class HPFSpectrum(object):
         self.f_sky_debl = self.f_sky / hdu[2].data
         self.f_cal_debl = self.f_cal / hdu[3].data
 
+        self.e_sci_debl = self.sci_err / hdu[1].data
+        self.e_sky_debl = self.sky_err / hdu[2].data
+        self.e_cal_debl = self.cal_err / hdu[3].data
+
+        #self.sci_and_sky_err = np.sqrt(self.sci_variance + self.sky_variance)*self.exptime
+        self.e_sci_sky_debl = np.sqrt(self.e_sci_debl**2. + self.e_sky_debl**2.)
+
         self.f_sci_sky_debl = self.f_sci_debl - self.f_sky_debl * self.SKY_SCALING_FACTOR
         if norm_percentile_per_order is not None:
             for i in range(28):
-                self.f_sci_sky_debl[i] = self.f_sci_sky_debl[i] / np.nanpercentile(self.f_sci_sky_debl[i],
-                                                                                   norm_percentile_per_order)
+                norm_val = np.nanpercentile(self.f_sci_sky_debl[i],norm_percentile_per_order)
+                self.f_sci_sky_debl[i] = self.f_sci_sky_debl[i] / norm_val
+                self.e_sci_sky_debl[i] = self.e_sci_sky_debl[i] / norm_val
         
         self.f_debl = self.f_sci_sky_debl
+        self.e_debl = self.e_sci_sky_debl
 
         #self.e_debl = self.f_debl/self.sn  #### RCT SEP 2020 need to check why this is here
             
@@ -674,6 +686,86 @@ class HPFSpectrum(object):
         ax.set_ylabel('Flux')
         ax.set_xlim(np.nanmin(self.w[o]),np.nanmax(self.w[o]))
 
+    def make_spec1ds(self,fl=None,w=None,e=None,note='',renormalize=False,renormalize_median_window=51,
+                     renormalize_model=Chebyshev1D(1),renormalize_percentile_scaling=95):
+        #w_ang,fl_counts,e_counts,median_window=51,model=Chebyshev1D(1),percentile_offset=98):
+        """ Convert spectrum into a set of specutils.spec1d objects
+        
+        Translate the HPF spectrum (by default the stellar spectrum) into a specutils.spec1d object
+        to take advantage of the analysis tools available.
+        
+        Parameters
+        ----------
+        fl : {ndarray}, optional
+            28x2048 array of fluxes
+        w : {ndarray}, optional
+            28x2048 array of wavelengths [ang]
+        e : {ndarray}, optional
+            28x2048 array of errors
+        """
+        if fl is None:
+            fl = self.f_sci_sky_debl
+            note = note+'f_sci_sky_debl,'
+        if w is None:
+            w = self.w_shifted
+            note = note + 'w_shifted,'
+        if e is None:
+            e = self.e_sci_sky_debl
+            note = note + 'e_sci_sky_debl'
+        norders, npix = np.shape(fl)
+        assert np.shape(fl) == np.shape(w)
+        assert np.shape(w) == np.shape(e)
+        out = OrderedDict()
+        for oi in range(norders):
+            w_use = w[oi]
+            e_use = e[oi]
+            fl_use = fl[oi]
+            mask = np.ma.masked_invalid(fl_use)
+            w_use = w_use[~mask.mask] 
+            fl_use = fl_use[~mask.mask]
+            e_use = e_use[~mask.mask]
+            if renormalize:
+                fl_use, e_use = spec_help.specutils_continuum_normalize(w_use,fl_use,e_use,
+                                                                        median_window=renormalize_median_window,
+                                                                        model=renormalize_model,
+                                                                        percentile_scaling=renormalize_percentile_scaling)
+                #print(fl_use.unit,e_use.unit)
+            out[oi] = spec_help.convert_to_spec1d(w_use,
+                                                  fl_use,
+                                                  e_use,
+                                                  resample=False,
+                                                  resample_kind='FluxConservingSpectRes',
+                                                  resample_fill_value=np.nan,
+                                                  resample_upsample_factor=1.)
+        self.spec1Ddict = out
+        self.spec1Dnote = note
+
+    def specutils_measure_ew(self,feature,diag=False):
+        assert self.spec1Ddict is not None
+        lower = feature.lower
+        upper = feature.upper
+        for oi in self.spec1Ddict.keys():
+            wls = self.spec1Ddict[oi].spectral_axis
+            omin, omax = np.nanmin(wls), np.nanmax(wls)
+            if (lower > omin) and (upper < omax):
+                o_use = oi
+                #print('Using oi {}'.format(oi))
+                break
+        if o_use is None:
+            raise ValueError('Feature not entirely in orders')
+        spec1d = self.spec1Ddict[oi]
+        out = specutils.analysis.equivalent_width(spec1d,regions=feature)
+        if not diag:
+            return(out)
+        else:
+            wls = self.spec1Ddict[o_use].spectral_axis
+            inds = np.nonzero( (wls > lower) & (wls < upper) )
+            outdict = {'ew':out,
+                       'order':o_use,
+                       'inds':inds}
+            return(outdict)
+
+                
 
 
 class HPFSpecList(object):

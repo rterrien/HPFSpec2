@@ -13,6 +13,8 @@ import specutils
 import astropy.units as u
 from astropy.nddata import StdDevUncertainty
 import spectres
+from astropy.modeling.models import Chebyshev1D
+from specutils.fitting import fit_generic_continuum
 c = 299792.4580   # [km/s]
 cp = sns.color_palette("colorblind")
 
@@ -324,3 +326,36 @@ def convert_to_spec1d(wl_angstrom,fl_counts,er_counts,resample=True,resample_kin
                                flux=fl_counts*u.count,
                                uncertainty=StdDevUncertainty(er_counts))
     return(out)
+
+
+def specutils_continuum_normalize(w_ang,fl_counts,e_counts,median_window=51,model=Chebyshev1D(1),percentile_scaling=98):
+    """ Continuum normalizer for one order
+    
+    Use specutils machinery to estimate a continuum normalization.
+    
+    Parameters
+    ----------
+    w_ang : {ndarray}
+        One spectral order wavelengths [ang]
+    fl_counts : {ndarray}
+        One spectral order fluxes [counts]
+    e_counts : {ndarray}
+        One spectral order errors [counts]
+    median_window : {int}
+        Pre-smoothing median filter window [pixels]
+    model : {astropy.modeling.models object}
+        Model used to fit continuum
+    """
+    nonnorm = specutils.Spectrum1D(spectral_axis = w_ang * u.AA,
+                                   flux = fl_counts * u.count,
+                                   uncertainty = StdDevUncertainty(e_counts))
+    norm_fit = fit_generic_continuum(nonnorm,median_window=median_window,model=model)
+    norm_vals = norm_fit(w_ang * u.AA)
+    out_fl = fl_counts * u.count / norm_vals
+    out_e = e_counts / norm_vals
+    if percentile_scaling is not None:
+        perc = np.nanpercentile(out_fl,percentile_scaling)
+        out_fl = out_fl / perc
+        out_e = out_e / perc
+        out_e = out_e.value
+    return(out_fl, out_e)
