@@ -45,7 +45,7 @@ class HPFSpectrum(object):
     SKY_SCALING_FACTOR = 0.90 # seems to work well for order 17
     
     def __init__(self,filename,targetname='',deblaze=True,ccf_redshift=True,target_kwargs={},keepsciHDU=False,keepflatHDU=False,
-                loadmask=True, model_data=None,verbose=False):
+                loadmask=True, model_data=None,verbose=False,hpfspec_data=None):
         """ Create the HPF spectrum object.
         
         Instantiate an HPF spectrum object for a single data frame or model spectrum.
@@ -74,134 +74,199 @@ class HPFSpectrum(object):
         self.filename = filename
         self.basename = filename.split(os.sep)[-1]
         self.verbose = verbose
-        
-        if model_data is None:
-            # Read science frame; copy all to eliminate references to HDU and allow it to close/garbage collect.
-            inp = astropy.io.fits.open(filename)
-            self.header = inp[0].header.copy()
-            self.sci_slope = inp[1].data.copy()
-            self.sky_slope = inp[2].data.copy()
-            self.cal_slope = inp[3].data.copy()
-            self.sci_variance = inp[4].data.copy()
-            self.sky_variance = inp[5].data.copy()
-            self.cal_variance = inp[6].data.copy()
-            self.sci_wave = inp[7].data.copy()
-            self.sky_wave = inp[8].data.copy()
-            self.cal_wave = inp[9].data.copy()
-            if keepsciHDU:
-                self.hdu = inp
-            else:
-                inp.close()
 
-            # Pull out some useful parts of the header
-            self.exptime = self.header["EXPLNDR"]
-            self.object = self.header["OBJECT"]
-            try: 
-                self.qprog = self.header["QPROG"]
-            except Exception:# as e: 
-                self.qprog = np.nan
-            midpoint_keywords = ['JD_FW{}'.format(i) for i in range(28)]
-            self.jd_midpoint = np.median(np.array([self.header[i] for i in midpoint_keywords]))
+        if hpfspec_data is not None:
+            self.header = hpfspec_data.header
+            self.sci_slope = hpfspec_data.f_sci * hpfspec_data.flat_sci / hpfspec_data.exptime  #       self.f_sci = self.hdu[1].data*self.exptime/self.flat_sci
+            self.sky_slope = hpfspec_data.f_sky * hpfspec_data.flat_sky / hpfspec_data.exptime
+            self.cal_slope = None #hpfspec_data.f_cal * hpfspec_data.flat_cal / hpfspec_data.exptime
+            self.sci_variance = (hpfspec_data.e_sci / hpfspec_data.exptime)**2. #np.sqrt(self.hdu[5].data)*self.exptime*self.SKY_SCALING_FACTOR
+            self.sky_variance = (hpfspec_data.e_sky / hpfspec_data.exptime / hpfspec_data.SKY_SCALING_FACTOR)**2.
+            self.cal_variance = None #(hpfspec_data.e_cal / hpfspec_data.exptime)**2.
+            # HPFSpec did not ingest the other wavelength arrays
+            self.sci_wave = hpfspec_data.w
+            self.sky_wave = None
+            self.cal_wave = None
+            self.exptime = hpfspec_data.exptime
+            self.object = hpfspec_data.object
+            self.qprog = hpfspec_data.qprog
+            self.jd_midpoint = hpfspec_data.jd_midpoint
+            self.target = hpfspec_data.target
+            self.bjd = hpfspec_data.bjd
+            self.berv = hpfspec_data.berv
+            self.w_barycentric_shifted = rv_utils.redshift(hpfspec_data.w,ve=0.,vo=hpfspec_data.berv) # this does not exist but we can create it
+            self.flat_header = hpfspec_data.header_flat
+            self.flat_sci_slope = hpfspec_data.flat_sci
+            self.flat_sky_slope = hpfspec_data.flat_sky #inp_flat[2].data.copy()
+            self.flat_cal_slope = None
+            self.sci_err = hpfspec_data.e_sci
+            self.sky_err = hpfspec_data.e_sky
+            self.cal_err = hpfspec_data.e_cal #np.sqrt(self.cal_variance)*self.exptime
+            self.sci_and_sky_err = hpfspec_data.e
+            self.f_sci = hpfspec_data.f_sci #self.sci_slope / self.flat_sci_slope * self.exptime
+            self.f_sky = hpfspec_data.f_sky #self.sky_slope / self.flat_sky_slope * self.exptime * self.SKY_SCALING_FACTOR
+            self.f_cal = None #self.cal_slope / self.flat_cal_slope * self.exptime
 
-            # Identify/process target information
-            if targetname == '':
-                targetname = self.object
-            self.target = Target(targetname,**target_kwargs)
-            self.bjd, self.berv = self.target.calc_barycentric_velocity(self.jd_midpoint,'McDonald Observatory')
+            self.f_sci_sky = hpfspec_data.f_sci - hpfspec_data.f_sky #self.f_sci - self.f_sky
 
-            # use the BJD and known barycentric velocity to define a wavelength array at rest in wrt solar system barycenter
-            self.w_barycentric_shifted = rv_utils.redshift(self.sci_wave,ve=0.,vo=self.berv)
-            
-            # Read Flat
-            inp_flat = astropy.io.fits.open(self.path_flat_deblazed)
-            self.flat_header = inp_flat[0].header.copy()
-            self.flat_sci_slope = inp_flat[1].data.copy()
-            self.flat_sky_slope = inp_flat[2].data.copy()
-            self.flat_cal_slope = inp_flat[3].data.copy()
-            if keepflatHDU:
-                self.flathdu = inp_flat
-            else:
-                inp_flat.close()
-
-            # Turn slopes into fluxes
-            self.sci_err = np.sqrt(self.sci_variance)*self.exptime
-            self.sky_err = np.sqrt(self.sky_variance)*self.exptime
-            self.cal_err = np.sqrt(self.cal_variance)*self.exptime
-
-            self.sci_and_sky_err = np.sqrt(self.sci_variance + self.sky_variance)*self.exptime
-
-            self.f_sci = self.sci_slope / self.flat_sci_slope * self.exptime
-            self.f_sky = self.sky_slope / self.flat_sky_slope * self.exptime * self.SKY_SCALING_FACTOR
-            self.f_cal = self.cal_slope / self.flat_cal_slope * self.exptime
-
-            self.f_sci_sky = self.f_sci - self.f_sky
-
-            self.sn18 = self.snr_order_median(18)
+            self.sn18 = hpfspec_data.sn18
 
             if deblaze:
-                self.deblaze(norm_percentile_per_order=80.)
-                if self.verbose:
-                    print('Spectrum Deblazed')
+                self.f_sci_debl = hpfspec_data.f_sci_debl #self.f_sci / hdu[1].data
+                self.f_sky_debl = hpfspec_data.f_sky_debl #self.f_sky / hdu[2].data
+                self.f_cal_debl = None
+
+                self.e_sci_debl = hpfspec_data.e_debl
+                self.e_sky_debl = None #self.sky_err / hdu[2].data
+                self.e_cal_debl = None #self.cal_err / hdu[3].data
+
+                #self.sci_and_sky_err = np.sqrt(self.sci_variance + self.sky_variance)*self.exptime
+                self.e_sci_sky_debl = hpfspec_data.e_debl #np.sqrt(self.e_sci_debl**2. + self.e_sky_debl**2.)
+
+                self.f_sci_sky_debl = hpfspec_data.f_debl #self.f_sci_debl - self.f_sky_debl * self.SKY_SCALING_FACTOR
+                # if norm_percentile_per_order is not None:
+                #     for i in range(28):
+                #         norm_val = np.nanpercentile(self.f_sci_sky_debl[i],norm_percentile_per_order)
+                #         self.f_sci_sky_debl[i] = self.f_sci_sky_debl[i] / norm_val
+                #         self.e_sci_sky_debl[i] = self.e_sci_sky_debl[i] / norm_val
+                
+                self.f_debl = hpfspec_data.f_debl
+                self.e_debl = hpfspec_data.e_debl
+
+            if loadmask:
+                self.M = hpfspec_data.M
+
+            if ccf_redshift:
+                self.rv = hpfspec_data.rv
+                self.w_shifted = hpfspec_data.w_shifted
 
         else:
-            # Read in model data, making sure the formatting is correct
-            assert type(model_data) == dict
-            assert 'fl' in model_data.keys()
-            assert 'w' in model_data.keys()
-            assert np.shape(model_data['w']) == (28,2048)
-            assert np.shape(model_data['fl']) == (28,2048)
+            if model_data is None:
+                # Read science frame; copy all to eliminate references to HDU and allow it to close/garbage collect.
+                inp = astropy.io.fits.open(filename)
+                self.header = inp[0].header.copy()
+                self.sci_slope = inp[1].data.copy()
+                self.sky_slope = inp[2].data.copy()
+                self.cal_slope = inp[3].data.copy()
+                self.sci_variance = inp[4].data.copy()
+                self.sky_variance = inp[5].data.copy()
+                self.cal_variance = inp[6].data.copy()
+                self.sci_wave = inp[7].data.copy()
+                self.sky_wave = inp[8].data.copy()
+                self.cal_wave = inp[9].data.copy()
+                if keepsciHDU:
+                    self.hdu = inp
+                else:
+                    inp.close()
 
-            # ingest model data; use dummy values where needed.
-            self.exptime = np.NaN
-            self.object = 'ModelSpectrum'
-            self.qprog = np.NaN
-            self.jd_midpoint = np.NaN
+                # Pull out some useful parts of the header
+                self.exptime = self.header["EXPLNDR"]
+                self.object = self.header["OBJECT"]
+                try: 
+                    self.qprog = self.header["QPROG"]
+                except Exception:# as e: 
+                    self.qprog = np.nan
+                midpoint_keywords = ['JD_FW{}'.format(i) for i in range(28)]
+                self.jd_midpoint = np.median(np.array([self.header[i] for i in midpoint_keywords]))
 
-            fl = model_data['fl']
-            w = model_data['w']
-            # If no error provided, assume fl in counts and Poisson noise
-            if 'er' in model_data.keys():
-                er = model_data['er']
+                # Identify/process target information
+                if targetname == '':
+                    targetname = self.object
+                self.target = Target(targetname,**target_kwargs)
+                self.bjd, self.berv = self.target.calc_barycentric_velocity(self.jd_midpoint,'McDonald Observatory')
+
+                # use the BJD and known barycentric velocity to define a wavelength array at rest in wrt solar system barycenter
+                self.w_barycentric_shifted = rv_utils.redshift(self.sci_wave,ve=0.,vo=self.berv)
+                
+                # Read Flat
+                inp_flat = astropy.io.fits.open(self.path_flat_deblazed)
+                self.flat_header = inp_flat[0].header.copy()
+                self.flat_sci_slope = inp_flat[1].data.copy()
+                self.flat_sky_slope = inp_flat[2].data.copy()
+                self.flat_cal_slope = inp_flat[3].data.copy()
+                if keepflatHDU:
+                    self.flathdu = inp_flat
+                else:
+                    inp_flat.close()
+
+                # Turn slopes into fluxes
+                self.sci_err = np.sqrt(self.sci_variance)*self.exptime
+                self.sky_err = np.sqrt(self.sky_variance)*self.exptime
+                self.cal_err = np.sqrt(self.cal_variance)*self.exptime
+
+                self.sci_and_sky_err = np.sqrt(self.sci_variance + self.sky_variance)*self.exptime
+
+                self.f_sci = self.sci_slope / self.flat_sci_slope * self.exptime
+                self.f_sky = self.sky_slope / self.flat_sky_slope * self.exptime * self.SKY_SCALING_FACTOR
+                self.f_cal = self.cal_slope / self.flat_cal_slope * self.exptime
+
+                self.f_sci_sky = self.f_sci - self.f_sky
+
+                self.sn18 = self.snr_order_median(18)
+
+                if deblaze:
+                    self.deblaze(norm_percentile_per_order=80.)
+                    if self.verbose:
+                        print('Spectrum Deblazed')
             else:
-                er = np.sqrt(fl)
+                # Read in model data, making sure the formatting is correct
+                assert type(model_data) == dict
+                assert 'fl' in model_data.keys()
+                assert 'w' in model_data.keys()
+                assert np.shape(model_data['w']) == (28,2048)
+                assert np.shape(model_data['fl']) == (28,2048)
 
-            # normalize the data; this will be different from de-blazing
-            fl_norm = fl.copy()
-            er_norm = er.copy()
-            for oi in range(28):
-                fl_norm[oi,:] = fl[oi,:] / np.nanmax(fl[oi,:])
-                er_norm[oi,:] = er[oi,:] / np.nanmax(fl[oi,:])
+                # ingest model data; use dummy values where needed.
+                self.exptime = np.NaN
+                self.object = 'ModelSpectrum'
+                self.qprog = np.NaN
+                self.jd_midpoint = np.NaN
 
-            # f_sci, f_sci_sky hold un-normalized spectra
-            # f_sci_sky_debl holds normalized spectra
-            self.sci_slope = fl
-            self.sci_variance = er**2.
-            self.f_sci = fl_norm
-            self.sci_err = er_norm
-            self.f_sci_sky = fl_norm
-            self.f_sci_sky_debl = fl_norm
-            self.w = w
-            self.w_barycentric_shifted = w
-            self.sci_wave = w
-            self.target = None
-            self.bjd = np.NaN
-            self.berv = 0.
-            self.rv = 0.
+                fl = model_data['fl']
+                w = model_data['w']
+                # If no error provided, assume fl in counts and Poisson noise
+                if 'er' in model_data.keys():
+                    er = model_data['er']
+                else:
+                    er = np.sqrt(fl)
 
-        if loadmask:
-            self.load_mask()
-            if self.verbose:
-                print('CCF Mask loaded')
-        
-        #self.rv = 0.
-        if ccf_redshift:
-            print('Barycentric shifting')
-            rabs,rabss = self.rvabs_orders()
-            self.rv = rabs #np.median(rabs)
-            if self.verbose:
-                print(self.rv,rabs,rabss)
-            self.redshift(rv=self.rv,berv=self.berv)
-            # this function creates the w_shifted array
+                # normalize the data; this will be different from de-blazing
+                fl_norm = fl.copy()
+                er_norm = er.copy()
+                for oi in range(28):
+                    fl_norm[oi,:] = fl[oi,:] / np.nanmax(fl[oi,:])
+                    er_norm[oi,:] = er[oi,:] / np.nanmax(fl[oi,:])
+
+                # f_sci, f_sci_sky hold un-normalized spectra
+                # f_sci_sky_debl holds normalized spectra
+                self.sci_slope = fl
+                self.sci_variance = er**2.
+                self.f_sci = fl_norm
+                self.sci_err = er_norm
+                self.f_sci_sky = fl_norm
+                self.f_sci_sky_debl = fl_norm
+                self.w = w
+                self.w_barycentric_shifted = w
+                self.sci_wave = w
+                self.target = None
+                self.bjd = np.NaN
+                self.berv = 0.
+                self.rv = 0.
+
+            if loadmask:
+                self.load_mask()
+                if self.verbose:
+                    print('CCF Mask loaded')
+            
+            #self.rv = 0.
+            if ccf_redshift:
+                print('Barycentric shifting')
+                rabs,rabss = self.rvabs_orders()
+                self.rv = rabs #np.median(rabs)
+                if self.verbose:
+                    print(self.rv,rabs,rabss)
+                self.redshift(rv=self.rv,berv=self.berv)
+                # this function creates the w_shifted array
 
 
     def __repr__(self):
