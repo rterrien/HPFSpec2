@@ -357,5 +357,5 @@ def specutils_continuum_normalize(w_ang,fl_counts,e_counts,median_window=51,mode
         perc = np.nanpercentile(out_fl,percentile_scaling)
         out_fl = out_fl / perc
         out_e = out_e / perc
-        out_e = out_e.value
+    out_e = out_e.value
     return(out_fl, out_e)

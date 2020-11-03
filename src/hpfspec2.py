@@ -45,7 +45,7 @@ class HPFSpectrum(object):
     SKY_SCALING_FACTOR = 0.90 # seems to work well for order 17
     
     def __init__(self,filename,targetname='',deblaze=True,ccf_redshift=True,target_kwargs={},keepsciHDU=False,keepflatHDU=False,
-                loadmask=True, model_data=None,verbose=False,hpfspec_data=None):
+                loadmask=True, model_data=None,verbose=False,hpfspec_data=None,cal=False):
         """ Create the HPF spectrum object.
         
         Instantiate an HPF spectrum object for a single data frame or model spectrum.
@@ -107,7 +107,7 @@ class HPFSpectrum(object):
             self.f_sky = hpfspec_data.f_sky #self.sky_slope / self.flat_sky_slope * self.exptime * self.SKY_SCALING_FACTOR
             self.f_cal = None #self.cal_slope / self.flat_cal_slope * self.exptime
 
-            self.f_sci_sky = hpfspec_data.f_sci - hpfspec_data.f_sky #self.f_sci - self.f_sky
+            self.f_sci_sky = hpfspec_data.f #hpfspec_data.f_sci - hpfspec_data.f_sky #self.f_sci - self.f_sky
 
             self.sn18 = hpfspec_data.sn18
 
@@ -170,13 +170,14 @@ class HPFSpectrum(object):
                 self.jd_midpoint = np.median(np.array([self.header[i] for i in midpoint_keywords]))
 
                 # Identify/process target information
-                if targetname == '':
-                    targetname = self.object
-                self.target = Target(targetname,**target_kwargs)
-                self.bjd, self.berv = self.target.calc_barycentric_velocity(self.jd_midpoint,'McDonald Observatory')
+                if not cal:
+                    if targetname == '':
+                        targetname = self.object
+                    self.target = Target(targetname,**target_kwargs)
+                    self.bjd, self.berv = self.target.calc_barycentric_velocity(self.jd_midpoint,'McDonald Observatory')
 
-                # use the BJD and known barycentric velocity to define a wavelength array at rest in wrt solar system barycenter
-                self.w_barycentric_shifted = rv_utils.redshift(self.sci_wave,ve=0.,vo=self.berv)
+                    # use the BJD and known barycentric velocity to define a wavelength array at rest in wrt solar system barycenter
+                    self.w_barycentric_shifted = rv_utils.redshift(self.sci_wave,ve=0.,vo=self.berv)
                 
                 # Read Flat
                 inp_flat = astropy.io.fits.open(self.path_flat_deblazed)
@@ -197,7 +198,7 @@ class HPFSpectrum(object):
                 self.sci_and_sky_err = np.sqrt(self.sci_variance + self.sky_variance)*self.exptime
 
                 self.f_sci = self.sci_slope / self.flat_sci_slope * self.exptime
-                self.f_sky = self.sky_slope / self.flat_sky_slope * self.exptime * self.SKY_SCALING_FACTOR
+                self.f_sky = self.sky_slope / self.flat_sky_slope * self.exptime #* self.SKY_SCALING_FACTOR
                 self.f_cal = self.cal_slope / self.flat_cal_slope * self.exptime
 
                 self.f_sci_sky = self.f_sci - self.f_sky
@@ -721,6 +722,60 @@ class HPFSpectrum(object):
             fitted_centers.append(fitout['centroid'])
         fitted_centers = np.array(fitted_centers)
         return(fitted_centers)
+
+    def fit_peaks_order(self,oi,wl_peaks,fl=None,w=None,prominence=0.1,width=(0,8),
+                         pixel_to_wl_interpolation_kind='cubic',fill_value=np.nan,
+                         fit_width_kms=None):
+        """ Find peaks in a spectral order
+        
+        Use the scipy.signal.find_peaks routine to locate lines in a spectral order.
+        Defaults to using f_sci_sky_debl and stellar rest frame wavelengths.
+        Presently the precision is only pixel-level, so interpolation is overkill.
+        
+        Parameters
+        ----------
+        oi : {int}
+            Order index
+        fl : {ndarray}, optional
+            1D array of fluxes. if provided, oi is ignored
+        w : {ndarray}, optional
+            1D array of wavelengths [ang]. if provided, oi is ignored
+        prominence : {float}, optional
+            Height above surroundings. Argument to scipy.signal.find_peaks (the default is 0.1)
+        width : {tuple}, optional
+            Bounds on peak width. Argument to scipy.signal.find_peaks (the default is (0,8))
+        pixel_to_wl_interpolation_kind : {str}, optional
+            Interpolation to use for converting pixels to wavelength (the default is 'cubic')
+        fill_value : {number}, optional
+            Fill value in interpolation (the default is np.nan)
+        fit_width_kms : {float}, optional
+            Fit the lines to find a more precise centroid. [km/s]
+            Skip this by not providing a number.
+        """
+        if fl is None:
+            fl = self.f_sci_sky_debl[oi]
+        if w is None:
+            w = self.w_shifted[oi]
+        # Find pixel centers and interpolate to wavelength values
+        #pixel_peaks = scipy.signal.find_peaks(-fl,prominence=prominence,width=width)[0] # propertes in [1]
+        xx = np.arange(2048)
+        pixel_peaks = scipy.interpolate.interp1d(w,xx,kind=pixel_to_wl_interpolation_kind,fill_value=fill_value,bounds_error=False)(wl_peaks)
+        #wl_peaks = scipy.interpolate.interp1d(xx,w,kind=pixel_to_wl_interpolation_kind,fill_value=fill_value,bounds_error=False)(pixel_peaks)
+
+        # If fit is not requested (i.e. fit_width_kms is None), just return pixel centers
+        if fit_width_kms is None:
+            return(wl_peaks)
+        
+        # Fit the centers using simple assumptions
+        fitted_centers = []
+        dwl_pix = np.nanmedian(np.diff(w))
+        dv_pix = dwl_pix / np.nanmedian(w) * 3e5
+        fit_width_pix = fit_width_kms / dv_pix
+        for pi,wi in zip(pixel_peaks,wl_peaks):
+            fitout = fitting_utils.fitProfile(w,fl,pi,fit_width_pix,func='fgauss_const',p0=[wi,-0.1,1.,1.])
+            fitted_centers.append(fitout['centroid'])
+        fitted_centers = np.array(fitted_centers)
+        return(fitted_centers)
         
     def plot_order(self,o,deblazed=False):
         """
@@ -927,7 +982,7 @@ class HPFSpecList(object):
         for sp in self.splist:
             w_this = getattr(sp,w_which)
             fl_this = getattr(sp,f_which)
-            all_peaks.append(sp.find_peaks_order(oi,w=w_this,fl=fl_this,prominence=prominence,width=width,
+            all_peaks.append(sp.find_peaks_order(oi,w=w_this[oi],fl=fl_this[oi],prominence=prominence,width=width,
                              pixel_to_wl_interpolation_kind=pixel_to_wl_interpolation_kind,fill_value=fill_value,
                              fit_width_kms=fit_width_kms))
         return(all_peaks)
@@ -947,6 +1002,7 @@ class HPFSpecList(object):
                     count = count + 1.
             if (count / n_specs) > needed_fraction:
                 use_lines.append(peak)
+        return(use_lines)
 
     @property
     def sn18(self):
