@@ -723,27 +723,24 @@ class HPFSpectrum(object):
         fitted_centers = np.array(fitted_centers)
         return(fitted_centers)
 
-    def fit_peaks_order(self,oi,wl_peaks,fl=None,w=None,prominence=0.1,width=(0,8),
+    def fit_peaks_order(self,oi,wl_peaks,fl=None,w=None,
                          pixel_to_wl_interpolation_kind='cubic',fill_value=np.nan,
-                         fit_width_kms=None):
-        """ Find peaks in a spectral order
+                         fit_width_kms=8.):
+        """ Fit peaks in a spectral order
         
-        Use the scipy.signal.find_peaks routine to locate lines in a spectral order.
-        Defaults to using f_sci_sky_debl and stellar rest frame wavelengths.
-        Presently the precision is only pixel-level, so interpolation is overkill.
+        If you already have peaks roughly located in wavelength, use this routine to
+        fit their locations more precisely.
         
         Parameters
         ----------
         oi : {int}
             Order index
+        wl_peaks : [list]
+            List of peak wavelengths in angstroms
         fl : {ndarray}, optional
             1D array of fluxes. if provided, oi is ignored
         w : {ndarray}, optional
             1D array of wavelengths [ang]. if provided, oi is ignored
-        prominence : {float}, optional
-            Height above surroundings. Argument to scipy.signal.find_peaks (the default is 0.1)
-        width : {tuple}, optional
-            Bounds on peak width. Argument to scipy.signal.find_peaks (the default is (0,8))
         pixel_to_wl_interpolation_kind : {str}, optional
             Interpolation to use for converting pixels to wavelength (the default is 'cubic')
         fill_value : {number}, optional
