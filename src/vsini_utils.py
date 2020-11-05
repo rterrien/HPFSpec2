@@ -1,6 +1,7 @@
 import hpfspec2
 import numpy as np
 import scipy
+import copy
 #from hpfspec import utils
 ##from hpfspec import spec_help
 #from hpfspec import stats
@@ -39,7 +40,7 @@ class vsini_calibration(object):
         orders : {list}, optional
             Orders on which to perform calibration (the default is [4,5,6,14,15,16,17])
         """
-        self.hpfspec = hpfspectrum
+        self.hpfspec = copy.deepcopy(hpfspectrum)
         if M is None:
             self.M = hpfspectrum.M
         else:
@@ -82,7 +83,8 @@ class vsini_calibration(object):
             # Make resampled/broadened spectra
             rotated = self.hpfspec.resample_and_broaden_order(oi, vsini=v, diag=True, upsample_factor=self.upsample_factor)
             # Make CCF and fit the output
-            fit_output = self.hpfspec.ccfwidth_order(oi, w=rotated['w_resampled'], fl=rotated['fl_broadened'], debug=True, fitwidth=self.fitwidth)
+            fit_output = self.hpfspec.ccfwidth_order(oi,w=rotated['w_resampled'], fl=rotated['fl_broadened'], debug=True, fitwidth=self.fitwidth,
+                                                    M=self.M)
             # Store results
             ccfs[i,:] = fit_output['ccf1']
             widths[i] = fit_output['fit']['sigma']

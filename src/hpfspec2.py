@@ -503,7 +503,7 @@ class HPFSpectrum(object):
             out_all['biweight_mean_val'] = biweight_mean_val
             return(out_all)
         else:
-            return(biweight_mean_val,out_velocities)
+            return(biweight_mean_val,out_velocities)   
 
     def ccfwidth_order(self,oi,velocities=np.linspace(-30,30,100),fl=None,w=None,M=None,debug=False,fitwidth=5.,
                        fitfunc='fgauss_from_1'):
