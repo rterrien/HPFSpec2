@@ -882,7 +882,9 @@ class HPFSpectrum(object):
                        'inds':inds}
             return(outdict)
 
-    def measure_ew(self,lower=lower,upper=upper,feature=feature,w=None,fl=None,diag=False):
+    def measure_ew(self,lower=None,upper=None,feature=None,w=None,fl=None,diag=False):
+        if ((lower is None) or (upper is None)) and (feature is None):
+            raise ValueError
         if feature is not None:
             lower = feature.lower
             upper = feature.upper
