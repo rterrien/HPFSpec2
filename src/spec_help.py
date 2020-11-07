@@ -399,7 +399,7 @@ def calculate_ew(wl,fl,limit_left,limit_right):
     leftmost_index = use[0]
     left_extra_bin = bin_right[leftmost_index-1] - limit_left
     left_extra_val = (1. - fl[leftmost_index-1]) * left_extra_bin
-    print(use)
+    #print(use)
     
     # right extra bin
     rightmost_index = use[-1]

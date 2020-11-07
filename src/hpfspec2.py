@@ -886,12 +886,13 @@ class HPFSpectrum(object):
         if ((lower is None) or (upper is None)) and (feature is None):
             raise ValueError
         if feature is not None:
-            lower = feature.lower
-            upper = feature.upper
+            lower = feature.lower.value
+            upper = feature.upper.value
+
         if fl is None:
-            fl = self.f_sci_sky_debl[oi]
+            fl = self.f_sci_sky_debl
         if w is None:
-            w = self.w_shifted[oi]
+            w = self.w_shifted
         norders, npix = np.shape(fl)
 
         for oi in range(norders):
