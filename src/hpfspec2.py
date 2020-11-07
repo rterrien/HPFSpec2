@@ -882,7 +882,38 @@ class HPFSpectrum(object):
                        'inds':inds}
             return(outdict)
 
-                
+    def measure_ew(self,lower=lower,upper=upper,feature=feature,w=None,fl=None,diag=False):
+        if feature is not None:
+            lower = feature.lower
+            upper = feature.upper
+        if fl is None:
+            fl = self.f_sci_sky_debl[oi]
+        if w is None:
+            w = self.w_shifted[oi]
+        norders, npix = np.shape(fl)
+
+        for oi in range(norders):
+            wls = w[oi]
+            omin, omax = np.nanmin(wls), np.nanmax(wls)
+            if (lower > omin) and (upper < omax):
+                o_use = oi
+                #print('Using oi {}'.format(oi))
+                break
+        if o_use is None:
+            raise ValueError('Feature not entirely in orders')
+        fl_use = fl[o_use]
+        wl_use = w[o_use]
+
+        out = spec_help.calculate_ew(wl_use,fl_use,lower,upper)
+
+        if not diag:
+            return(out)
+        else:
+            inds = np.nonzero( (wl_use > lower) & (wl_use < upper) )
+            outdict = {'ew':out,
+                       'order':o_use,
+                       'inds':inds}
+            return(outdict)
 
 
 class HPFSpecList(object):
