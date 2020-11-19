@@ -45,7 +45,7 @@ class HPFSpectrum(object):
     SKY_SCALING_FACTOR = 0.90 # seems to work well for order 17
     
     def __init__(self,filename,targetname='',deblaze=True,ccf_redshift=True,target_kwargs={},keepsciHDU=False,keepflatHDU=False,
-                loadmask=True, model_data=None,verbose=False,hpfspec_data=None,cal=False):
+                loadmask=True, model_data=None,verbose=False,hpfspec_data=None,cal=False,rvshift_orders=[5]):
         """ Create the HPF spectrum object.
         
         Instantiate an HPF spectrum object for a single data frame or model spectrum.
@@ -74,6 +74,7 @@ class HPFSpectrum(object):
         self.filename = filename
         self.basename = filename.split(os.sep)[-1]
         self.verbose = verbose
+        self.rvshift_orders = rvshift_orders
 
         if hpfspec_data is not None:
             self.header = hpfspec_data.header
@@ -262,7 +263,7 @@ class HPFSpectrum(object):
             #self.rv = 0.
             if ccf_redshift:
                 print('Barycentric shifting')
-                rabs,rabss = self.rvabs_orders()
+                rabs,rabss = self.rvabs_orders(orders=self.rvshift_orders)
                 self.rv = rabs #np.median(rabs)
                 if self.verbose:
                     print(self.rv,rabs,rabss)

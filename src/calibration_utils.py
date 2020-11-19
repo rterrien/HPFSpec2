@@ -64,6 +64,10 @@ def measure_peaks_order(wl,fl,peak_locs,xx=None,pix_to_wvl=None,pix_to_wvl_per_p
             p0 = [loc_this,2.5,1.,0.]
         elif fitfunc == 'fgauss_line':
             p0 = [loc_this,2.5,1.,0.,0.]
+        elif fitfunc == 'fgauss':
+            p0 = [loc_this,2.1,1.]
+        else:
+            raise ValueError
         tmp = neidspec.fitting_utils.fitProfile(xx,fl,loc_this,fit_width=8,sigma=None,
                                                 func=fitfunc,p0=p0)
         #tmp['centroid_wl'] = interp(tmp['centroid'],xx_pix,xx_test)
