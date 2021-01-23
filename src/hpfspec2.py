@@ -919,6 +919,21 @@ class HPFSpectrum(object):
                        'inds':inds}
             return(outdict)
 
+    def which_order(self,wavelength):
+        ''' Say which order a wavelength falls in
+        
+        Parameters
+        ----------
+        wavelength : float
+            wavelength to query
+        '''
+        wmins = np.nanmin(self.w_shifted,axis=1)
+        wmaxs = np.nanmax(self.w_shifted,axis=1)
+        for oi in range(28):
+            if (wavelength > wmins[oi]) and (wavelength < wmaxs[oi]):
+                return(oi)
+        return(None)
+
 
 class HPFSpecList(object):
 
@@ -1036,20 +1051,7 @@ class HPFSpecList(object):
                 use_lines.append(peak)
         return(use_lines)
 
-    def which_order(self,wavelength):
-        ''' Say which order a wavelength falls in
-        
-        Parameters
-        ----------
-        wavelength : float
-            wavelength to query
-        '''
-        wmins = np.nanmin(self.w_shifted,axis=1)
-        wmaxs = np.nanmax(self.w_shifted,axis=1)
-        for oi in range(28):
-            if (wavelength > wmins[oi]) and (wavelength < wmaxs[oi]):
-                return(oi)
-        return(None)
+    
 
     @property
     def sn18(self):
