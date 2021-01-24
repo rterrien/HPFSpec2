@@ -883,7 +883,7 @@ class HPFSpectrum(object):
                        'inds':inds}
             return(outdict)
 
-    def measure_ew(self,lower=None,upper=None,feature=None,w=None,fl=None,diag=False):
+    def measure_ew(self,lower=None,upper=None,feature=None,w=None,fl=None,diag=False,const_continuum_regions=[]):
         if ((lower is None) or (upper is None)) and (feature is None):
             raise ValueError
         if feature is not None:
@@ -907,6 +907,27 @@ class HPFSpectrum(object):
             raise ValueError('Feature not entirely in orders')
         fl_use = fl[o_use]
         wl_use = w[o_use]
+
+        if len(const_continuum_regions) > 0:
+            print('Renormalizing to constant value')
+            ci_use = []
+            for clim in const_continuum_regions:
+                lower_lim = clim[0]
+                upper_lim = clim[1]
+                tmp_i = np.nonzero((wl_use >= lower_lim) & (wl_use <= upper_lim))[0]
+                if len(tmp_i) > 0:
+                    for j in tmp_i:
+                        ci_use.append(j)
+                else:
+                    print('No suitable pixels found for {:.2f} to {:.2f}'.format(lower_lim,upper_lim))
+            if len(ci_use) > 0:
+                new_norm = astropy.stats.biweight_location(fl_use[ci_use])
+                print('New norm: {:.3}'.format(new_norm))
+                fl_use = fl_use / new_norm
+            else:
+                print('No renorm pixels found, skipping')
+                
+
 
         out = spec_help.calculate_ew(wl_use,fl_use,lower,upper)
 
