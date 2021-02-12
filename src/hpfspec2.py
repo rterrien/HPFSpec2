@@ -17,6 +17,7 @@ from PyAstronomy import pyasl
 from collections import OrderedDict
 from astropy.modeling.models import Chebyshev1D
 import specutils
+from numpy.random import default_rng
 
 class HPFSpectrum(object):
     """ An object containing HPF spectral data.
@@ -954,6 +955,59 @@ class HPFSpectrum(object):
             if (wavelength > wmins[oi]) and (wavelength < wmaxs[oi]):
                 return(oi)
         return(None)
+
+    def jitter_spectrum(self):
+        ''' Jitter the spectrum by the given variance
+        
+        Jitter each pixel's slope value by the pipeline-reported variance.
+        Make sure to do this on a copy of the original spectrum - the 
+        flux values will be permanently changed for this object.
+
+        The object then re-does the ingestion of the spectrum (flattening, deblazing)
+        '''
+        # self.header = inp[0].header.copy()
+        # self.sci_slope = inp[1].data.copy()
+        # self.sky_slope = inp[2].data.copy()
+        # self.cal_slope = inp[3].data.copy()
+        # self.sci_variance = inp[4].data.copy()
+        # self.sky_variance = inp[5].data.copy()
+        # self.cal_variance = inp[6].data.copy()
+        # self.sci_wave = inp[7].data.copy()
+        # self.sky_wave = inp[8].data.copy()
+        # self.cal_wave = inp[9].data.copy()
+        # if keepsciHDU:
+        #     self.hdu = inp
+        # else:
+        #     inp.close()
+        shape = np.shape(self.sci_slope)
+        jitter_sci = default_rng().normal(0,np.sqrt(self.sci_variance),shape)
+        jitter_cal = default_rng().normal(0,np.sqrt(self.cal_variance),shape)
+        jitter_sky = default_rng().normal(0,np.sqrt(self.sky_variance),shape)
+        self.sci_slope = self.sci_slope + jitter_sci
+        self.cal_slope = self.cal_slope + jitter_cal
+        self.sky_slope = self.sky_slope + jitter_sky
+
+        # Turn slopes into fluxes
+        self.sci_err = np.sqrt(self.sci_variance)*self.exptime
+        self.sky_err = np.sqrt(self.sky_variance)*self.exptime
+        self.cal_err = np.sqrt(self.cal_variance)*self.exptime
+
+        self.sci_and_sky_err = np.sqrt(self.sci_variance + self.sky_variance)*self.exptime
+
+        self.f_sci = self.sci_slope / self.flat_sci_slope * self.exptime
+        self.f_sky = self.sky_slope / self.flat_sky_slope * self.exptime #* self.SKY_SCALING_FACTOR
+        self.f_cal = self.cal_slope / self.flat_cal_slope * self.exptime
+
+        self.f_sci_sky = self.f_sci - self.f_sky
+
+        self.sn18 = self.snr_order_median(18)
+
+
+        self.deblaze(norm_percentile_per_order=80.)
+
+
+        print('Spectrum Jittered (automatically deblazed)')
+
 
 
 class HPFSpecList(object):
