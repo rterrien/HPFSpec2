@@ -407,3 +407,43 @@ def calculate_ew(wl,fl,limit_left,limit_right):
     right_extra_val = (1. - fl[rightmost_index+1]) * right_extra_bin
     
     return(np.sum(sub) + left_extra_val + right_extra_val)
+
+def renorm(wl,fl,regions,type='constant'):
+    if type == 'slope':
+        print('Renormalizing to slope')
+        ci_use = []
+        for clim in regions:
+            lower_lim = clim[0]
+            upper_lim = clim[1]
+            tmp_i = np.nonzero((wl >= lower_lim) & (wl <= upper_lim))[0]
+            if len(tmp_i) > 0:
+                for j in tmp_i:
+                    ci_use.append(j)
+            else:
+                print('No suitable pixels found for {:.2f} to {:.2f}'.format(lower_lim,upper_lim))
+        ww_fit = wl[ci_use]
+        ff_fit = fl[ci_use]
+        pp = np.polyfit(ww_fit,ff_fit,1)
+        norm = np.polyval(pp,wl)
+        fl = fl / norm
+    elif type == 'constant':
+        print('Renormalizing to constant value')
+        ci_use = []
+        for clim in regions:
+            lower_lim = clim[0]
+            upper_lim = clim[1]
+            tmp_i = np.nonzero((wl >= lower_lim) & (wl <= upper_lim))[0]
+            if len(tmp_i) > 0:
+                for j in tmp_i:
+                    ci_use.append(j)
+            else:
+                print('No suitable pixels found for {:.2f} to {:.2f}'.format(lower_lim,upper_lim))
+        if len(ci_use) > 0:
+            new_norm = astropy.stats.biweight_location(fl[ci_use])
+            print('New norm: {:.3}'.format(new_norm))
+            fl = fl / new_norm
+        else:
+            print('No renorm pixels found, skipping')
+    else:
+        print('No type available')
+    return(fl)
