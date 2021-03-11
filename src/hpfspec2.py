@@ -169,7 +169,11 @@ class HPFSpectrum(object):
                 except Exception:# as e: 
                     self.qprog = np.nan
                 midpoint_keywords = ['JD_FW{}'.format(i) for i in range(28)]
-                self.jd_midpoint = np.median(np.array([self.header[i] for i in midpoint_keywords]))
+                try:
+                    self.jd_midpoint = np.median(np.array([self.header[i] for i in midpoint_keywords]))
+                except TypeError:
+                    self.jd_midpoint = self.header['JD_FW5']
+                    print('Warning: JD averaging failed; using just JD_FW5')
 
                 # Identify/process target information
                 if not cal:
