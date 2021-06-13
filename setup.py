@@ -35,7 +35,8 @@ setuptools.setup(
                 'hpfspec2.vsini_utils',
                 'hpfspec2.model_utils',
                 'hpfspec2.fitting_utils',
-                'hpfspec2.calibration_utils'],
+                'hpfspec2.calibration_utils',
+                'hpfspec2.wavecalLib'],
     #py_modules=['ccf.mask'],
     #packages=['mask'],
 #    classifiers=[
