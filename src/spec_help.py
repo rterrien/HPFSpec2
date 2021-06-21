@@ -217,6 +217,9 @@ def resample_to_median_sampling(x,y,e=None,kind='FluxConservingSpectRes',fill_va
     x_min = np.nanmin(x)
     x_max = np.nanmax(x)
     med_dx = np.nanmedian(np.diff(x))
+    if not isinstance(upsample_factor,int):
+        upsample_factor = int(upsample_factor)
+        print("Warning: Upsample factor converted to int")
     # How many points are required to span the same range, with median sampling * upsample factor
     n_pts = int((x_max - x_min) / med_dx) * upsample_factor
     x_new = np.linspace(x_min,x_max,n_pts)
