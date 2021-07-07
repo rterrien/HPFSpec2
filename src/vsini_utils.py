@@ -53,6 +53,8 @@ class vsini_calibration(object):
             self.vsinis = vsinis
         if velocities is None:
             self.velocities = np.linspace(-50,50,100)
+        else:
+            self.velocities = velocities
         self.eps = eps
         self.n_vsini = len(self.vsinis)
         self.n_velocities = len(self.velocities)
@@ -83,8 +85,7 @@ class vsini_calibration(object):
             # Make resampled/broadened spectra
             rotated = self.hpfspec.resample_and_broaden_order(oi, vsini=v, diag=True, upsample_factor=self.upsample_factor)
             # Make CCF and fit the output
-            fit_output = self.hpfspec.ccfwidth_order(oi,w=rotated['w_resampled'], fl=rotated['fl_broadened'], debug=True, fitwidth=self.fitwidth,
-                                                    M=self.M)
+            fit_output = self.hpfspec.ccfwidth_order(oi,w=rotated['w_resampled'], fl=rotated['fl_broadened'], debug=True, fitwidth=self.fitwidth, M=self.M)
             # Store results
             ccfs[i,:] = fit_output['ccf1']
             widths[i] = fit_output['fit']['sigma']
