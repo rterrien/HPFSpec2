@@ -100,7 +100,8 @@ class vsini_calibration(object):
         for oi in self.orders:
             self.make_calcurve_order(oi)
 
-    def measure_vsini_order(self,hpfspec_target,oi,trim_nan=True,debug=False,calcurve_interpolation_kind='cubic'):
+    def measure_vsini_order(self,hpfspec_target,oi,trim_nan=True,debug=False,calcurve_interpolation_kind='cubic',
+                            velocities=None):
         """ Interpolate CCF width to measure vsini
         
         Measure CCF using the present mask, and interpolate onto current CCF width vs vsini curve to derive vsini.
@@ -124,12 +125,14 @@ class vsini_calibration(object):
             mask = np.ma.masked_invalid(fl)
             w = w[~mask.mask]
             fl = fl[~mask.mask]
+        if velocities is None:
+            velocities = self.velocities
         # resample target spectrum to the same level that the calibration spectrum was resampled
         w_resampled, fl_resampled = hpfspec2.spec_help.resample_to_median_sampling(w,fl,upsample_factor=self.upsample_factor)
         
         # Calculate CCF and width using the same mask used to generate calibration curve
         ccf_target = hpfspec_target.ccfwidth_order(oi, w=w_resampled, fl=fl_resampled, debug=True, fitwidth=self.fitwidth, 
-                                                   M=self.M)
+                                                   M=self.M,velocities=velocities)
         
         # interpolate measured width onto calibration curve
         cal_ccf_widths = self.calibration_widths[oi]
