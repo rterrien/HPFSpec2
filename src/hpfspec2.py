@@ -18,6 +18,7 @@ from collections import OrderedDict
 from astropy.modeling.models import Chebyshev1D
 import specutils
 from numpy.random import default_rng
+import copy
 
 class HPFSpectrum(object):
     """ An object containing HPF spectral data.
@@ -1085,6 +1086,59 @@ class HPFSpecList(object):
             order_combined = spec_help.resample_combine(wl_base[oi],warr,flarr,combine_type=combine_type,sigma_clip=sigma_clip)
             out[oi,:] = order_combined
         self.combined_spec = out
+
+    def combine_to_new_spectrum(self,f_which='f_sci_sky_debl',w_which=None,combine_type='biweight',sigma_clip=5.,verbose=True):
+        """ Combine spectra in a list
+        
+        Resample and combine spectra. This routine does not do anything clever to maintain resolution,
+        so check that outputs are not dependent on, e.g., how much barycentric sampling there is.
+
+        Output is populated into a copy of the first spectrum in the list.
+        
+        Parameters
+        ----------
+        f_which : {str}, optional
+            Which flux array to combine (the default is 'f_sci_sky_debl')
+        w_which : {str}, optional
+            Which wavelength array to use (the default is w_shifted - i.e. the stellar rest frame)
+        combine_type : {str}, optional
+            How to combine the spectra after resampling (the default is 'biweight')
+        sigma_clip : {number}, optional
+            If a sigma-clipped statistic is used for combining, the clip value (the default is 5.)
+        """
+        # For now, use the first spectrum as the baseline.
+        spec1 = self.splist[0]
+        # If w_which is not given: use cal_wave if f_cal/debl or cal_sky if f_sky/debl is used
+        # otherwise, just use w_shifted
+        if w_which is None:
+            if f_which in ['f_cal','f_cal_debl']:
+                w_which = 'cal_wave'
+            elif f_which in ['f_sky','f_sky_debl']:
+                w_which = 'sky_wave'
+            else:
+                w_which = 'w_shifted'
+        wl_base = getattr(spec1,w_which)
+        n_specs = len(self.splist)
+        out = np.full((28,2048),np.nan)
+
+        # For each spectrum, resample to the baseline wavelength grid and combine.
+        for oi in range(28):
+            warr = np.full((n_specs,2048),np.nan)
+            flarr = np.full((n_specs,2048),np.nan)
+            for si in range(n_specs):
+                spec_this = self.splist[si]
+                warr[si,:] = getattr(spec_this,w_which)[oi]
+                flarr[si,:] = getattr(spec_this,f_which)[oi]
+            order_combined = spec_help.resample_combine(wl_base[oi],warr,flarr,combine_type=combine_type,sigma_clip=sigma_clip)
+            out[oi,:] = order_combined
+        self.combined_spec = out
+
+        outspec = copy.deepcopy(spec1)
+        setattr(outspec,w_which,wl_base)
+        setattr(outspec,f_which,out)
+        if verbose:
+            print('WARNING: {} and {} are combined in the output spectrum, which is otherwise a copy of the first spectrum in the list.')
+        return(outspec)
 
     def find_peaks_order(self,oi,f_which='f_sci_sky_debl',w_which=None,prominence=0.1,width=(0,8),
                          pixel_to_wl_interpolation_kind='cubic',fill_value=np.nan,fit_width_kms=None):
