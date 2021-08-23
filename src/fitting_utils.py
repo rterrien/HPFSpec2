@@ -240,7 +240,7 @@ def fitProfile(inp_x, inp_y, fit_center_in, fit_width=8, sigma=None,
         use_function = fgauss_from_1
     elif func == 'fvoigt_from_1':
         if p0 is None:
-            p0 = (np.mean(sub_x),1., -np.ptp(sub_y_norm),1.)
+            p0 = (np.mean(sub_x),1., np.ptp(sub_y_norm),1.)
         use_function = fvoigt_from_1
     else:
         raise ValueError
