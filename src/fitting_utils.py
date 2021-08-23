@@ -3,6 +3,7 @@ import numpy as np
 import scipy.interpolate
 import scipy.optimize
 import copy
+import scipy.special
 
 def fgauss(x, center, sigma, amp):
     """A Gaussian function.
@@ -73,6 +74,36 @@ def fgauss_from_1(x, center, sigma, amp):
     amp = float(amp)
     offset = 1.
     return(float(amp) * np.exp(-((x - center) / sigma) ** 2.) + offset)
+
+def fvoigt_from_1(x, center, sigma, amp, gamma):
+    """ 1 - Voigt function for fitting spectral lines.
+    
+    Note that the Voigt function gives a Cauchy dist if sigma=0,
+    and a gaussian of gamma=0. 
+
+    Parameters
+    ----------
+    x : float array
+        Independent variable for the function
+    center : float
+        Center of the function
+    sigma : float
+        Sigma (width) for gaussian component
+    amp : float
+        Amplitude for the function
+    gamma : Half-width half-max for the Cuachy component
+        
+    """
+    
+    center = float(center)
+    sigma = float(sigma)
+    amp = float(amp)
+    gamma = float(gamma)
+    offset = 1.
+
+    x_translated = x - center
+
+    return(offset - amp * scipy.special.voigt_profile(x_translated, sigma, gamma))
 
 
 def fgauss_line(x, center, sigma, amp, offset, slope):
@@ -207,6 +238,10 @@ def fitProfile(inp_x, inp_y, fit_center_in, fit_width=8, sigma=None,
         if p0 is None:
             p0 = (np.mean(sub_x),1., -np.ptp(sub_y_norm))
         use_function = fgauss_from_1
+    elif func == 'fvoigt_from_1':
+        if p0 is None:
+            p0 = (np.mean(sub_x),1., -np.ptp(sub_y_norm),1.)
+        use_function = fvoigt_from_1
     else:
         raise ValueError
 
