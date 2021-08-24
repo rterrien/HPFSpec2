@@ -134,7 +134,8 @@ def fgauss_line(x, center, sigma, amp, offset, slope):
     return(float(amp) * np.exp(-((x - center) / sigma) ** 2.) + offset + x * slope)
 
 def fitProfile(inp_x, inp_y, fit_center_in, fit_width=8, sigma=None,
-               func='fgauss_const', return_residuals=False,p0=None,bounds=(-np.inf,np.inf)):
+               func='fgauss_const', return_residuals=False,p0=None,bounds=(-np.inf,np.inf),
+               curve_fit_kw={}):
     """Perform a least-squares fit to a CCF.
 
     Parameters
@@ -253,7 +254,8 @@ def fitProfile(inp_x, inp_y, fit_center_in, fit_width=8, sigma=None,
                                               p0=p0,
                                               sigma=sub_sigma,
                                               maxfev=10000,
-                                              bounds=bounds)
+                                              bounds=bounds,
+                                              **curve_fit_kw)
 
         # Pull out fit results
         # fitted values (0 is the centroid, 1 is the sigma, 2 is the amp)
