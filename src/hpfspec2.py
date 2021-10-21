@@ -979,6 +979,28 @@ class HPFSpectrum(object):
                 return(oi)
         return(None)
 
+    def renormalize_simple(self,which='f_sci_sky_debl'):
+        """
+        Use a simple renormalization technique to flatten the orders.
+        Maxfilter -> Gaussfilter
+        """
+        if which not in ['f_debl','f_sci_debl','f_sky_debl','f_sci','f_cal','f_sky','f_sci_sky_debl']:
+            raise(ValueError)
+        fluxToCorrect = getattr(self,which)
+        fluxCorrected = np.full_like(fluxToCorrect,np.nan)
+        trends = np.full_like(fluxToCorrect,np.nan)
+        for oi in range(28):
+            flux = fluxToCorrect[oi,:]
+            corrected, trend = spec_help.detrend_maxfilter_gaussian(flux,n_max=300,n_gauss=500)
+            fluxCorrected[oi,:] = corrected
+            trends[oi,:] = trend
+        if hasattr(self,'trends_removed'):
+            self.trends_removed[which] = trends
+        else:
+            self.trends_removed = OrderedDict()
+            self.trends_removed[which] = trends
+        setattr(self,which,fluxCorrected)
+
     def jitter_spectrum(self):
         ''' Jitter the spectrum by the given variance
         

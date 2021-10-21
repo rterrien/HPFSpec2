@@ -66,24 +66,34 @@ def jd2datetime(times):
     return np.array([astropy.time.Time(time,format="jd",scale="utc").datetime for time in times])
 
 
-def detrend_maxfilter_gaussian(flux,n_max=300,n_gauss=500,plot=False):
+def maximum_filter_ignore_nan(array, *args, **kwargs):
+    nans = np.isnan(array)
+    replaced = np.where(nans, -np.inf, array)
+    return scipy.ndimage.filters.maximum_filter(replaced, *args, **kwargs)
+
+def gaussian_filter1d_ignore_nan(array,sigma,Gaussian1DKernel_kwargs={},convolve_kwargs={}):
+    kern = astropy.convolution.Gaussian1DKernel(sigma,**Gaussian1DKernel_kwargs)
+    conv = astropy.convolution.convolve(array,kern,**convolve_kwargs)
+    return conv
+
+
+def detrend_maxfilter_gaussian(flux,n_max=400,n_gauss=500,plot=False):
     """
     A function useful to estimate spectral continuum
-
     INPUT:
         flux: a vector of fluxes
         n_max: window for max filter
         n_gauss: window for gaussian filter smoothing
-
     OUTPUT:
         flux/trend - the trend corrected flux
         trend - the estimated trend
-
     EXAMPLE:
         f_norm, trend = detrend_maxfilter_gaussian(df_temp.flux,plot=True)
     """
-    flux_filt = scipy.ndimage.filters.maximum_filter1d(flux,n_max)
-    trend = scipy.ndimage.filters.gaussian_filter1d(flux_filt,sigma=n_gauss)
+    #flux_filt = scipy.ndimage.filters.maximum_filter1d(flux,n_max)
+    flux_filt = maximum_filter_ignore_nan(flux,n_max)
+    #trend = scipy.ndimage.filters.gaussian_filter1d(flux_filt,sigma=n_gauss)
+    trend = gaussian_filter1d_ignore_nan(flux_filt,n_gauss,convolve_kwargs={'boundary':'extend'})
     if plot:
         fig, ax = plt.subplots()
         ax.plot(flux)
